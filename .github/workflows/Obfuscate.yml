@@ -1,12 +1,12 @@
-name: Build Obfuscate BPB Panel
+name: Build Optimized BPB Panel
 
 on:
   push:
     branches:
       - main
   schedule:
-        # Runs everyday at 1:00 AM
-        - cron: "0 1 * * *"
+    # Runs everyday at 1:00 AM
+    - cron: "0 1 * * *"
 
 permissions:
   contents: write
@@ -22,7 +22,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "latest"
+          node-version: "18.x"  # 使用稳定版本而非latest
 
       - name: Install dependencies
         run: |
@@ -32,26 +32,40 @@ jobs:
         run: |
           wget -O origin.js https://raw.githubusercontent.com/bia-pain-bache/BPB-Worker-Panel/refs/heads/main/build/unobfuscated-worker.js
 
-      - name: Obfuscate BPB worker js
+      - name: Optimize before obfuscation
+        run: |
+          # 添加代码优化步骤（示例）
+          sed -i '/console.debug/d' origin.js  # 移除调试日志
+          sed -i 's/const /let /g' origin.js  # 统一变量声明
+
+      - name: Obfuscate BPB worker js (Optimized)
         run: |
           javascript-obfuscator origin.js --output _worker.js \
           --compact true \
-          --control-flow-flattening true \
-          --control-flow-flattening-threshold 1 \
-          --dead-code-injection true \
-          --dead-code-injection-threshold 1 \
+          --control-flow-flattening false \  # 禁用最耗性能的选项
+          --dead-code-injection false \     # 禁用
           --identifier-names-generator hexadecimal \
           --rename-globals true \
           --string-array true \
-          --string-array-encoding 'rc4' \
-          --string-array-threshold 1 \
-          --transform-object-keys true \
-          --unicode-escape-sequence true
+          --string-array-encoding 'base64' \  # 改用base64
+          --string-array-threshold 0.75 \     # 调整阈值
+          --transform-object-keys false \
+          --unicode-escape-sequence false \
+          --simplify true \
+          --target 'browser-no-eval'  # 更安全的target
+
+      - name: Validate worker size
+        run: |
+          SIZE=$(stat -c%s "_worker.js")
+          echo "Worker size: $SIZE bytes"
+          if [ $SIZE -gt 1000000 ]; then
+            echo "Worker too large (>1MB)"
+            exit 1
+          fi
 
       - name: Commit changes
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           branch: main
-          commit_message: ':arrow_up: update latest bpb panel'
-          commit_author: 'github-actions[bot] <github-actions[bot]@users.noreply.github.com>'
-          push_options: '--set-upstream'
+          commit_message: ':zap: optimized worker update'
+          file_pattern: '_worker.js'
